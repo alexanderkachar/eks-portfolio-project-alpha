@@ -48,6 +48,22 @@ module "rds" {
   cluster_security_group_id = module.eks.cluster_security_group_id
 }
 
+module "runner" {
+  source = "../../modules/runner"
+
+  project_name     = var.project_name
+  environment      = var.environment
+  vpc_id           = module.vpc.vpc_id
+  vpc_cidr         = module.vpc.vpc_cidr
+  runner_subnet_id = module.vpc.runner_subnet_ids[0]
+
+  github_owner           = var.github_owner
+  github_repo            = var.github_repo
+  pat_ssm_parameter_name = "/${var.project_name}/github/pat"
+
+  ecr_repository_arns = values(module.ecr.repository_arns)
+}
+
 module "bastion" {
   source = "../../modules/bastion"
 
