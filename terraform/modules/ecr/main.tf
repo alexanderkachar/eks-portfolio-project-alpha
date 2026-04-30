@@ -14,6 +14,8 @@ resource "aws_ecr_repository" "this" {
     encryption_type = "KMS"
   }
 
+  # Allow `terraform destroy` to drop repositories that still hold images.
+  # Without this the runner's first push permanently blocks teardown.
   force_delete = true
 
   tags = {
