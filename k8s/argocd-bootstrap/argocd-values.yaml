@@ -1,0 +1,95 @@
+global:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mirror/argoproj/argocd
+    tag: v3.0.6
+
+redis:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mirror/argoproj/redis
+    tag: 7.2.8-alpine
+
+dex:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mirror/argoproj/dex
+    tag: v2.43.1
+  # Dex is only needed for SSO. Disable it to save memory on the two-node cluster.
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# repo-server — the component that pulls OCI charts from ECR.
+# ---------------------------------------------------------------------------
+repoServer:
+  serviceAccount:
+    create: true
+    # Must match the Pod Identity association created in infra/modules/eks/addons.tf.
+    name: argocd-repo-server
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# application-controller
+# ---------------------------------------------------------------------------
+controller:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ---------------------------------------------------------------------------
+# server (API / UI)
+# ---------------------------------------------------------------------------
+server:
+  # Ingress is created via the platform app-of-apps once LBC is running.
+  # Keeping it disabled here prevents a race condition during initial bootstrap.
+  ingress:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# applicationSet controller
+# ---------------------------------------------------------------------------
+applicationSet:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# notifications controller
+# ---------------------------------------------------------------------------
+notifications:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# ---------------------------------------------------------------------------
+# ArgoCD server config
+# ---------------------------------------------------------------------------
+configs:
+  params:
+    # Run server without TLS; the ALB terminates TLS and forwards plain HTTP
+    # internally. Without this the ALB health check gets a TLS handshake error.
+    server.insecure: true

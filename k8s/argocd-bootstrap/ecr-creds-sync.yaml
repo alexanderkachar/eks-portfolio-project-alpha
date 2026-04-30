@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ecr-creds-patcher
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [argocd-ecr-creds, argocd-ecr-mirror-creds]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ecr-creds-patcher
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: argocd-repo-server
+    namespace: argocd
+roleRef:
+  kind: Role
+  name: ecr-creds-patcher
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ecr-creds-sync
+  namespace: argocd
+spec:
+  # Every 6 hours — well inside the 12-hour ECR token TTL.
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: argocd-repo-server
+          restartPolicy: OnFailure
+          containers:
+            - name: ecr-creds-sync
+              image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mirror/argoproj/argocd:v3.0.6
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  TOKEN="$(aws ecr get-login-password --region us-east-1)"
+                  for secret in argocd-ecr-creds argocd-ecr-mirror-creds; do
+                    kubectl patch secret "$secret" \
+                      --namespace argocd \
+                      --type merge \
+                      -p "{\"data\":{\"password\":\"$(echo -n "$TOKEN" | base64 -w0)\",\"username\":\"$(echo -n 'AWS' | base64 -w0)\"}}"
+                  done
+                  echo "ECR token refreshed at $(date -u)"
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
