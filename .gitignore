@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.terraform/
+*.tfvars
+*.tfstate
+*.tfstate.*
+*.lock.hcl
+*.log
+*.tfplan
+crash.log
+.DS_Store
+.env
