@@ -5,6 +5,9 @@ set -euo pipefail
 REGION="${AWS_REGION:-us-east-1}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+MIRROR_PLATFORMS="${MIRROR_PLATFORMS:-linux/amd64}"
+MIRROR_RETRIES="${MIRROR_RETRIES:-4}"
+MIRROR_RETRY_DELAY_SECONDS="${MIRROR_RETRY_DELAY_SECONDS:-20}"
 
 IMAGES=(
   # Argo CD chart 8.1.2 defaults.
@@ -57,21 +60,69 @@ mirror_one() {
   local src="$1" dest="$2"
   local repo="${dest%:*}"
   local tag="${dest##*:}"
+  local target="${REGISTRY}/${dest}"
+  local sources=("$src")
 
   if image_exists_in_ecr "$repo" "$tag"; then
     printf '[skip] %s:%s already in ECR\n' "$repo" "$tag"
     return 0
   fi
 
-  local target="${REGISTRY}/${dest}"
-  printf '[copy] %s -> %s\n' "$src" "$target"
-  docker buildx imagetools create --tag "$target" "$src"
+  if [[ "$src" == public.ecr.aws/docker/library/* ]]; then
+    sources+=("docker.io/library/${src#public.ecr.aws/docker/library/}")
+  fi
+
+  for src in "${sources[@]}"; do
+    if copy_with_retries "$src" "$target"; then
+      return 0
+    fi
+    printf '[fallback] %s failed\n' "$src" >&2
+  done
+
+  printf 'ERROR: failed to mirror %s to %s\n' "$1" "$target" >&2
+  return 1
+}
+
+copy_with_retries() {
+  local src="$1" target="$2"
+  local attempt=1
+  local platform_args=()
+
+  if [[ -n "$MIRROR_PLATFORMS" ]]; then
+    platform_args=(--platform "$MIRROR_PLATFORMS")
+  fi
+
+  while true; do
+    printf '[copy] %s -> %s' "$src" "$target"
+    if [[ -n "$MIRROR_PLATFORMS" ]]; then
+      printf ' (%s)' "$MIRROR_PLATFORMS"
+    fi
+    printf '\n'
+
+    if docker buildx imagetools create \
+      --progress plain \
+      "${platform_args[@]}" \
+      --tag "$target" \
+      "$src"; then
+      return 0
+    fi
+
+    if (( attempt >= MIRROR_RETRIES )); then
+      return 1
+    fi
+
+    printf '[retry] %s failed, retrying in %ss (%d/%d)\n' \
+      "$src" "$MIRROR_RETRY_DELAY_SECONDS" "$attempt" "$MIRROR_RETRIES" >&2
+    sleep "$MIRROR_RETRY_DELAY_SECONDS"
+    attempt=$((attempt + 1))
+  done
 }
 
 main() {
   require_buildx
   login_ecr
   local mirrored=0
+  local src dest
   for entry in "${IMAGES[@]}"; do
     src="${entry%%=*}"
     dest="${entry#*=}"
