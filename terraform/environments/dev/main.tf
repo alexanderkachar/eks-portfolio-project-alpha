@@ -30,3 +30,19 @@ module "eks" {
   ebs_csi_role_arn    = module.iam.ebs_csi_role_arn
   admin_principal_arn = var.admin_principal_arn
 }
+
+module "bastion" {
+  source = "../../modules/bastion"
+
+  project_name = var.project_name
+  environment  = var.environment
+  region       = var.region
+  vpc_id       = module.vpc.vpc_id
+  vpc_cidr     = module.vpc.vpc_cidr
+
+  subnet_id = module.vpc.runner_subnet_ids[0]
+
+  cluster_name              = module.eks.cluster_name
+  cluster_arn               = module.eks.cluster_arn
+  cluster_security_group_id = module.eks.cluster_security_group_id
+}
