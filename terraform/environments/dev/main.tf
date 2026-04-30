@@ -31,6 +31,16 @@ module "eks" {
   admin_principal_arn = var.admin_principal_arn
 }
 
+module "rds" {
+  source = "../../modules/rds"
+
+  project_name              = var.project_name
+  environment               = var.environment
+  vpc_id                    = module.vpc.vpc_id
+  db_subnet_ids             = module.vpc.db_subnet_ids
+  cluster_security_group_id = module.eks.cluster_security_group_id
+}
+
 module "bastion" {
   source = "../../modules/bastion"
 
