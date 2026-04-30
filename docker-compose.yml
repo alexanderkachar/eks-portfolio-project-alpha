@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: todos
+      POSTGRES_USER: todos
+      POSTGRES_PASSWORD: todos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/backend/migrations/001_create_todos.sql:/docker-entrypoint-initdb.d/001_create_todos.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todos -d todos"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: src/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: todos
+      DB_USER: todos
+      DB_PASSWORD: todos
+      DB_SSL: "false"
+    command: sh -c "npm run migrate && npm start"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./apps/frontend
+    ports:
+      - "80:8080"
+    volumes:
+      - ./apps/frontend/nginx.local.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

@@ -1,0 +1,68 @@
+nameOverride: ""
+fullnameOverride: ""
+
+imageRegistry: 038526103886.dkr.ecr.us-east-1.amazonaws.com
+
+domainName: alexanderkachar.com
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: todo-frontend
+    tag: dev
+    pullPolicy: IfNotPresent
+  service:
+    port: 80
+    targetPort: 8080
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+backend:
+  replicaCount: 2
+  image:
+    repository: todo-backend
+    tag: dev
+    pullPolicy: IfNotPresent
+  service:
+    port: 3000
+  env:
+    dbSsl: "true"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+rds:
+  ssmPrefix: /project-hotel/rds
+  secretName: todo-backend-db
+
+externalSecrets:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreName: todo-aws-parameter-store
+  region: us-east-1
+
+ingress:
+  enabled: true
+  host: todo.alexanderkachar.com
+  groupName: project-hotel
+  scheme: internet-facing
+  targetType: ip
+  certificateArn: arn:aws:acm:us-east-1:038526103886:certificate/0702be4a-814e-44bd-894d-dca6879e62c6
+  healthcheckPath: /
+  listenPorts:
+    - HTTP: 80
+    - HTTPS: 443
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
